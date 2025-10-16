@@ -1,7 +1,14 @@
 #ifndef LWPH
 #define LWPH
 #include <sys/types.h>
+#include <stdlib.h>     // for malloc, free
+#include <string.h>     // for memset
+#include <sys/mman.h>   // for mmap, munmap
+#include <sys/resource.h>// for getrlimit
+#include <unistd.h>     // for sysconf, _SC_PAGE_SIZE
 
+
+#define DEFAULT_STACK_SIZE (8 * 1024 * 1024) // Default 8MB stack size
 #ifndef TRUE
 #define TRUE 1
 #endif
