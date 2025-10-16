@@ -1,0 +1,5 @@
+August Hogen-Esch (ahogenes)
+
+My makefile for creating liblwp.so is under ./src/Makefile
+
+Running 'make' in ./src builds liblwp.so
