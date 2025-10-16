@@ -15,6 +15,7 @@ thread all_lwps = NULL;     // Head of the list of all LWPs (for tid2thread)
 scheduler curr_sched = NULL; // Currently active scheduler
 
 // FIFO Library Queues (Using lib_two for queue management)
+// Having both the head and tail makes adding to end of the list more effecient
 // Waiting: Simple singly linked list  of LWPs blocked in lwp_wait()
 thread waiting_head = NULL;
 thread waiting_tail = NULL;
@@ -23,12 +24,7 @@ thread waiting_tail = NULL;
 thread terminated_head = NULL;
 thread terminated_tail = NULL;
 
-
-// External assembly function
-extern void swap_rfiles(rfile *old, rfile *new);
-extern void lwp_wrap(lwpfun fun, void *arg);
-
-/* Queue Helper Functions (Using lib_two) */
+/* Queue Helper functions (Using lib_two) */
 
 // Enqueues a thread onto a singly linked list (FIFO)
 static void enqueue(thread *head, thread *tail, thread new_lwp) {
@@ -54,12 +50,13 @@ static thread dequeue(thread *head, thread *tail) {
     return victim;
 }
 
-/* --- Round Robin Scheduler Functions (Unmodified) --- */
+/* Default Round Robin Scheduler functions,  */
+/* sched_one = next_thread; sched_two = prev_thread; */
 
 thread rr_head = NULL; // Head of the circular linked list
 int rr_cnt = 0;
 
-void rr_init(void) { 
+void rr_init(void) { // Always start from nothing
     rr_head = NULL;
     rr_cnt = 0;
 }
@@ -67,19 +64,20 @@ void rr_init(void) {
 // Add 'new' to the end of the circular list
 void rr_admit(thread new) {
     if(rr_head){
-        //the last thread is the previous to the head
+        // the last thread is the previous of the head in ciricular list
         thread prev = rr_head->sched_two;
         prev->sched_one = new;
         // the next after the last thread is the head
-        // the previous of new shuold be the old last thread
         new->sched_one = rr_head;
+        // the previous of 'new' shuold be the former last thread
         new->sched_two = prev;
+        // 'new' should be the previous thread to the head.
         rr_head->sched_two = new;
     }
     else{
         // if rr_head was NULL, new is the only element in the list
         rr_head = new;
-        // if there is only 1 element, its next and prev pointers are to itself.
+        // if there is only 1 element, its next and prev pointers are to itself
         rr_head->sched_one = rr_head;
         rr_head->sched_two = rr_head;
     }
@@ -172,8 +170,9 @@ extern tid_t lwp_create(lwpfun function, void *argument) {
     new_lwp->stacksize = stack_size;
 
     // Allocate Stack 
-    stack_base = (unsigned long *)mmap(NULL, stack_size, PROT_READ | PROT_WRITE, 
-                                     MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+    stack_base = (unsigned long *)mmap(NULL, stack_size, \
+    PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+
     if (stack_base == MAP_FAILED) {
         free(new_lwp);
         return NO_THREAD;
@@ -227,34 +226,34 @@ extern void lwp_wrap(lwpfun fun, void *arg) {
 extern void lwp_exit(int status){
     thread waiting_thread;
     
-    // 1. Set the thread's termination status
+    // set the thread's termination status
     curr_lwp->status = MKTERMSTAT(LWP_TERM, status);
 
-    // 2. Remove the LWP from the runnable queue
+    // remove the LWP from the runnable queue
     curr_sched->remove(curr_lwp);
 
-    // 3. Handle Waiters: Check the waiting queue
+    // Handle Waiters: Check the waiting queue
     waiting_thread = dequeue(&waiting_head, &waiting_tail);
     
     if (waiting_thread != NULL) { 
-        // A thread is waiting; unblock it.
+        // a thread is waiting; unblock it.
         
         // Link the terminated LWP to the waiting thread's 'exited' pointer
         waiting_thread->exited = curr_lwp;
         
-        // Re-admit the formerly waiting thread back to the scheduler
+        // re-admit the formerly waiting thread back to the scheduler
         curr_sched->admit(waiting_thread);
         
     } else {
-        // No thread is waiting; enqueue the current LWP onto the terminated list.
+    // No thread is waiting; enqueue the current LWP onto the terminated list.
         enqueue(&terminated_head, &terminated_tail, curr_lwp);
     }
 
-    // 4. Yield control. This function does not return.
+    // Yield control
     lwp_yield();
 }
 
-// returns the tid from the current LWP's context, or NO_THREAD if curr_lwp is NULL
+// returns the tid from the current LWP's context, or NO_THREAD if it's NULL
 extern tid_t lwp_gettid(void){
     if(curr_lwp){
         return curr_lwp->tid;
@@ -264,7 +263,7 @@ extern tid_t lwp_gettid(void){
     }
 }
 
-// yields control to the next LWP
+// Yields control to the next LWP
 extern void lwp_yield(void){
     thread next_lwp;
     thread old_lwp;
@@ -278,6 +277,7 @@ extern void lwp_yield(void){
     // Handle System Termination
     if (next_lwp == NULL) {
         int term_status = LWPTERMSTAT(curr_lwp->status);
+        // only shutdown if its given in scheduler
         if (curr_sched->shutdown) {
             curr_sched->shutdown();
         }
@@ -290,13 +290,16 @@ extern void lwp_yield(void){
     swap_rfiles(&old_lwp->state, &curr_lwp->state);
 }
 
+// Starts the threading system by converting the OG thread to an LWP
 extern void lwp_start(void){
     thread original_thread;
     
+    // only start once
     if (curr_lwp != NULL) {
         return;
     }
 
+    // allocate memory for its context and clear it
     original_thread = (thread)malloc(sizeof(struct threadinfo_st));
     if (!original_thread) {
         perror("malloc: Failed to allocate context for original thread");
@@ -306,6 +309,7 @@ extern void lwp_start(void){
 
     original_thread->tid = next_tid++;
     original_thread->status = LWP_LIVE;
+    // no need to allocate a stack since it presumably has one
     original_thread->stack = NULL; 
     original_thread->stacksize = 0;
     
@@ -320,11 +324,14 @@ extern void lwp_start(void){
         }
     }
     
+    // add it to the current scheduler
     curr_sched->admit(curr_lwp);
 
+    // add it to the list of all lwps
     original_thread->lib_one = all_lwps;
     all_lwps = original_thread;
-    
+
+    // Yield to the next lwp
     lwp_yield();
 }
 
@@ -332,38 +339,41 @@ extern void lwp_start(void){
 extern tid_t lwp_wait(int *status){
     thread term_lwp;
 
-    // 1. Check terminated list
+    // Check terminated list
     term_lwp = dequeue(&terminated_head, &terminated_tail);
     
-    if (term_lwp) {
-        // Found a terminated LWP to reap (fast path)
-        goto reap_thread;
+    // if nothing in list, block and switch to another lwp
+    if (!term_lwp) {
+        // Check for deadlock 
+        // (only happens if the calling thread is the only runnable thread)
+        // The original system thread can't block itself if it is the only one.
+        if (curr_sched->qlen() <= 1 && curr_lwp->stack != NULL) {
+            /* If the only runnable thread is the caller, 
+                and it's not the original system thread (stack!=NULL), 
+                it can't wait for anything else to terminate. */
+            return NO_THREAD;
+        }
+
+        // Block: Remove from runnable queue and add to waiting queue
+        curr_sched->remove(curr_lwp);
+        enqueue(&waiting_head, &waiting_tail, curr_lwp);
+        
+        // Switch to another thread (lwp_yield() saves current context)
+        lwp_yield();
+
+        // Resumed (Unblocked): Execution resumes here 
+        // when another thread calls lwp_exit()
+        
+        // The terminated thread is now pointed to by curr_lwp->exited
+        term_lwp = curr_lwp->exited;
+        if (!term_lwp){
+            return NO_THREAD; // Should not happen if unblocked correctly
+        } 
+        
+        // Fall through to reaping logic
     }
 
-    // 2. Check for deadlock (only happens if the calling thread is the only runnable thread)
-    // The original system thread can't block itself if it is the only one.
-    if (curr_sched->qlen() <= 1 && curr_lwp->stack != NULL) {
-         // This is a subtle condition. If the only runnable thread is the caller, and it's not
-         // the original system thread (stack!=NULL), it can't wait for anything else to terminate.
-         return NO_THREAD;
-    }
-
-    // 3. Block: Remove from runnable queue and add to waiting queue
-    curr_sched->remove(curr_lwp);
-    enqueue(&waiting_head, &waiting_tail, curr_lwp);
-    
-    // Switch to another thread (lwp_yield() saves current context)
-    lwp_yield();
-
-    // 4. Resumed (Unblocked): Execution resumes here when another thread calls lwp_exit()
-    
-    // The terminated thread is now pointed to by curr_lwp->exited
-    term_lwp = curr_lwp->exited;
-    if (!term_lwp) return NO_THREAD; // Should not happen if unblocked correctly
-    
-    // Fall through to reaping logic
-reap_thread:
-    // 5. Reap the thread
+    // Reap the thread
     if (status) {
         *status = term_lwp->status;
     }
@@ -374,9 +384,10 @@ reap_thread:
     }
     
     // Remove from all_lwps list 
-    if (term_lwp == all_lwps) {// Case 1: Thread to be reaped is the head of the master list
+    // Case 1: Thread to be reaped is the head of the master list
+    if (term_lwp == all_lwps) {
         all_lwps = term_lwp->lib_one; 
-    } else {  // Case 2: Thread is in the middle or tail
+    } else {  // Case 2: thread is in the middle or tail
         thread curr = all_lwps;
         while (curr && curr->lib_one != term_lwp) {
             curr = curr->lib_one;
@@ -385,7 +396,7 @@ reap_thread:
             // Unlink term_lwp by setting the previous node's link to bypass it
             curr->lib_one = term_lwp->lib_one; 
         }
-        // No else needed, if curr is null, it wasn't part of the list, which shuold never happen
+        // No else needed, if curr is null, it wasn't part of the list
     }
     tid_t reaped_tid = term_lwp->tid;
     free(term_lwp);
@@ -397,12 +408,12 @@ extern void lwp_set_scheduler(scheduler fun){
     scheduler old_sched = curr_sched;
     thread victim;
 
-    // Handle default: if fun is NULL, set it to the default round-robin scheduler 
+    // Handle default: if fun is NULL, set it to the default scheduler
     if (fun == NULL) {
         fun = RoundRobin;
     }
 
-    // Shutdown old scheduler if it is not the new one and has a shutdown function
+    // Shutdown old scheduler if it is not the new one and has a shutdown()
     if (old_sched != NULL && old_sched != fun && old_sched->shutdown) {
         old_sched->shutdown();
     }

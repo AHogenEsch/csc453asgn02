@@ -93,5 +93,6 @@ extern thread tid2thread(tid_t tid);
 
 /* prototypes for asm functions */
 void swap_rfiles(rfile *old, rfile *new);
+extern void lwp_wrap(lwpfun fun, void *arg);
 
 #endif
