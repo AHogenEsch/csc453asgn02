@@ -42,8 +42,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include "lwp.h"
-#include "schedulers.h"
+#include "../include/lwp.h"
+#include "../include/schedulers.h"
 
 #define MAXSNAKES  100
 

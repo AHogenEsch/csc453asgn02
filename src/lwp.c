@@ -362,6 +362,7 @@ extern tid_t lwp_wait(int *status){
     if (!term_lwp) return NO_THREAD; // Should not happen if unblocked correctly
     
     // Fall through to reaping logic
+reap_thread:
     // 5. Reap the thread
     if (status) {
         *status = term_lwp->status;

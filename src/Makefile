@@ -20,7 +20,7 @@ liblwp.so: lwp.o magic64.o
 	$(CC) $(LDFLAGS) -o $@ lwp.o magic64.o
 	@echo "Successfully built liblwp.so"
 
-lwp.o: lwp.c lwp.h
+lwp.o: lwp.c ../include/lwp.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Assembly Rule: Compiles .S files to .o files

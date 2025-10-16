@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "lwp.h": "c",
+        "snakes.h": "c",
+        "util.h": "c",
+        "schedulers.h": "c",
+        "limits.h": "c",
+        "signal.h": "c"
+    }
+}

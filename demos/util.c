@@ -27,9 +27,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
-#include "snakes.h"
-#include "lwp.h"
-#include "util.h"
+#include "../include/snakes.h"
+#include "../include/lwp.h"
+#include "../include/util.h"
 
 
 #ifdef OLDSCHEDULERS
